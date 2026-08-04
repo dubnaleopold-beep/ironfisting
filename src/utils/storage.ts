@@ -118,30 +118,25 @@ export const clearAllLogs = (): void => {
   localStorage.removeItem(STORAGE_KEY);
 };
 
-// --- Импорт из CSV (поддержка старого и нового формата) ---
-// --- Импорт из CSV (поддержка старого и нового формата) ---
+// --- Импорт из CSV (универсальный, автоопределение формата) ---
 export const importLogsFromCSV = (csvText: string): { count: number; error?: string; totalExercises?: number } => {
   const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   if (lines.length === 0) return { count: 0, error: 'Файл пуст' };
 
   const header = lines[0];
   const columns = header.split(';').map(c => c.trim());
+  const colCount = columns.length;
 
-  // Определяем формат
-  const hasExerciseID = columns.includes('Exercise ID');
-  const hasExerciseName = columns.includes('Упражнение'); // старый формат
-
-  if (!hasExerciseID && !hasExerciseName) {
-    return { count: 0, error: 'Не найден столбец "Exercise ID" или "Упражнение". Проверьте файл.' };
-  }
+  // Определяем формат по количеству столбцов
+  const isNewFormat = colCount > 15; // новый формат с отдельными столбцами для бэкоф-сетов
 
   const dataLines = lines.slice(1);
   const logsMap = new Map<string, WorkoutLog>();
 
   for (const line of dataLines) {
-    // Разбиваем с учётом возможных кавычек (но наш экспорт без кавычек, однако на всякий случай чистим)
-    const cols = line.split(';').map(c => c.trim().replace(/^"(.*)"$/, '$1')); // убираем обрамляющие кавычки
-    if (cols.length < 6) continue; // минимальное количество полей
+    // Разбиваем строку, убираем возможные кавычки
+    const cols = line.split(';').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+    if (cols.length < 6) continue;
 
     let dateStr: string, dayName: string, cycleStr: string;
     let exerciseId: string, exerciseCategory: string;
@@ -150,8 +145,8 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
     let backoffSets: { weight: number; reps: number }[] = [];
     let lastBackoffRPE: number | null = null;
 
-    if (hasExerciseID) {
-      // Новый формат
+    if (isNewFormat) {
+      // Новый формат (как текущий экспорт)
       dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
       exerciseId = cols[3]; exerciseCategory = cols[4];
       pdm = parseFloat(cols[5]) || 0;
@@ -161,6 +156,7 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
       topReps = parseInt(cols[9]) || 0;
       topRPE = parseFloat(cols[10]) || 0;
 
+      // бэкоф-сеты: начиная с индекса 11, 5 пар (вес, повторы)
       let idx = 11;
       for (let i = 0; i < 5; i++) {
         const w = parseFloat(cols[idx] || '0');
@@ -170,11 +166,12 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
         }
         idx += 2;
       }
-      if (cols[idx]) lastBackoffRPE = parseFloat(cols[idx]) || null;
-
+      // RPE последнего: последний столбец
+      if (cols.length > idx && cols[idx]) {
+        lastBackoffRPE = parseFloat(cols[idx]) || null;
+      }
     } else {
-      // Старый формат (без Exercise ID, бэкоф-сеты в одной колонке)
-      // Индексы: 0-дата,1-день,2-цикл,3-упражнение(категория),4-ПДМ,5-Тоннаж,6-КПШ,7-топ вес,8-топ повт,9-топ RPE,10-бэкоф-сеты,11-RPE последнего
+      // Старый формат (12 столбцов, без Exercise ID, бэкоф-сеты в одной колонке)
       dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
       exerciseId = cols[3]; // используем как ID
       exerciseCategory = cols[3];
@@ -185,12 +182,11 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
       topReps = parseInt(cols[8]) || 0;
       topRPE = parseFloat(cols[9]) || 0;
 
-      // бэкоф-сеты: может быть что-то вроде "105x5; 105x5" или "105x5 ; 105x5"
+      // бэкоф-сеты: колонка 10
       const backoffRaw = cols[10] || '';
       if (backoffRaw && backoffRaw !== '—') {
-        // Убираем возможные кавычки и лишние пробелы
         const clean = backoffRaw.replace(/"/g, '').trim();
-        // Разбиваем по ; или , (на случай разных разделителей)
+        // разбиваем по запятой или точке с запятой
         const parts = clean.split(/[;,]/);
         for (const part of parts) {
           const match = part.trim().match(/(\d+(?:\.\d+)?)\s*x\s*(\d+)/i);
@@ -201,7 +197,7 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
           }
         }
       }
-      // RPE последнего: может быть в cols[11], если есть
+      // RPE последнего: колонка 11
       if (cols.length > 11 && cols[11] && cols[11] !== '—') {
         lastBackoffRPE = parseFloat(cols[11]) || null;
       }
