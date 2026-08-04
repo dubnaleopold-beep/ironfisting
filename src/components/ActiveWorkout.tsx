@@ -18,10 +18,9 @@ interface ExerciseEntry {
   pdm: number | null;
   backoffSets: { weight: number; reps: number }[];
   lastBackoffRPE: number | string;
-  // разминка для макроцикла
   warmupSets: WarmupSet[];
-  warmupChecked: boolean[]; // отметки о выполнении
-  bodyweight?: number | string; // только для подтягиваний
+  warmupChecked: boolean[];
+  bodyweight?: number | string;
 }
 
 interface DeloadResult {
@@ -101,21 +100,18 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     saveDraft(draft);
   }, [entries, dayIndex]);
 
-  // Генерация разминки при изменении микроцикла или выборе упражнения
+  // Генерация разминки для макроцикла
   useEffect(() => {
     if (!macrocycleId || !microcycle || !currentWeek || currentWeek <= 1) return;
-    // обновляем разминку для всех слотов
     setEntries(prev => {
       const updated = { ...prev };
       slots.forEach(slot => {
         const entry = updated[slot.category];
         const exercise = exercisesData.find(e => e.id === entry.exerciseId);
-        if (!exercise || exercise.protocol === 'free') return; // free — без авторазминки
+        if (!exercise || exercise.protocol === 'free') return;
         const prevPDM = getLastPDM(entry.exerciseId);
-        if (!prevPDM) return; // нет истории — без разминки
-        const targetTopSetPercent = microcycle.backoffPercent; // процент для бэкофа, но для разминки берём от веса топ-сета
-        // вес топ-сета вычисляем по RPE и повторениям микроцикла
-        let topSetTargetPercent = 0.80; // запасной вариант
+        if (!prevPDM) return;
+        let topSetTargetPercent = 0.80;
         try {
           topSetTargetPercent = getPercentPM(microcycle.topSetReps, microcycle.topSetTargetRPE);
         } catch {}
@@ -161,6 +157,44 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     });
   };
 
+  // Ручное управление подходами
+  const addBackoffSet = (category: string) => {
+    setEntries(prev => {
+      const current = prev[category];
+      if (current.backoffSets.length >= 5) return prev;
+      return {
+        ...prev,
+        [category]: {
+          ...current,
+          backoffSets: [...current.backoffSets, { weight: 0, reps: 0 }],
+        },
+      };
+    });
+  };
+
+  const updateBackoffSet = (category: string, index: number, field: 'weight' | 'reps', value: string) => {
+    setEntries(prev => {
+      const current = prev[category];
+      const newSets = [...current.backoffSets];
+      newSets[index] = { ...newSets[index], [field]: parseFloat(value) || 0 };
+      return {
+        ...prev,
+        [category]: { ...current, backoffSets: newSets },
+      };
+    });
+  };
+
+  const removeBackoffSet = (category: string, index: number) => {
+    setEntries(prev => {
+      const current = prev[category];
+      const newSets = current.backoffSets.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        [category]: { ...current, backoffSets: newSets },
+      };
+    });
+  };
+
   const handleCalculate = (category: string) => {
     const entry = entries[category];
     const weight = parseFloat(entry.topSetWeight as string);
@@ -180,6 +214,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       let deloadDecision: DeloadResult = { shouldDeload: false, percentDrop: 0, recommendedBackoffWeight: 0, recommendedBackoffSets: 2 };
 
       if (!isFreeProtocol && !isFreeMode) {
+        // Макроцикл: автоматический расчёт
         const prevPDM = getLastPDM(entry.exerciseId);
         const backoffPercent = microcycle ? microcycle.backoffPercent : 0.775;
         const baseBackoffWeight = Math.round((pdm * backoffPercent) / 2.5) * 2.5;
@@ -195,6 +230,9 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         } else {
           backoffSets = Array.from({ length: baseBackoffSets }, () => ({ weight: baseBackoffWeight, reps: 5 }));
         }
+      } else if (!isFreeProtocol && isFreeMode) {
+        // Свободный режим: очищаем подходы (пользователь добавит сам)
+        backoffSets = [];
       }
 
       setEntries(prev => ({ ...prev, [category]: { ...prev[category], pdm, backoffSets } }));
@@ -293,7 +331,6 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               </div>
             )}
 
-            {/* Поле собственного веса для подтягиваний */}
             {ex?.needsBodyweight && (
               <div style={{ marginBottom: '10px' }}>
                 <label>Свой вес (кг): </label>
@@ -301,7 +338,6 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               </div>
             )}
 
-            {/* Разминка для макроцикла */}
             {macrocycleId && currentWeek === 1 && !isFree && (
               <div style={{ background: '#f9f9f9', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
                 Первая неделя — выполни разминку самостоятельно. Со следующей недели она будет рассчитана автоматически.
@@ -319,7 +355,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               </div>
             )}
 
-            {/* Остальной интерфейс (топ-сет, бэкоф и т.д.) */}
+            {/* Топ-сет и бэкоф-сеты для не-free */}
             {!isFree ? (
               <>
                 {microcycle && <div style={{ background: '#e8f0fe', padding: '8px', marginBottom: '10px', borderRadius: '5px', fontSize: '0.9em' }}>Цель: {targetReps} повт. @ RPE {targetRPE}</div>}
@@ -346,40 +382,98 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                     {entry.backoffSets.map((set, idx) => {
                       const pct = entry.pdm! > 0 ? ((set.weight / entry.pdm!) * 100).toFixed(0) : '0';
                       return (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                          {isFreeMode ? (
-                            <>
-                              <input type="number" placeholder="Вес" value={set.weight || ''} onChange={e => { /* ручное обновление */ }} style={{ width: '70px' }} />
-                              <span>кг x</span>
-                              <input type="number" placeholder="Повт" value={set.reps || ''} onChange={e => {}} style={{ width: '60px' }} />
-                            </>
-                          ) : (
-                            <span>{set.weight} кг x {set.reps} повторений</span>
-                          )}
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                          <input
+                            type="number"
+                            placeholder="Вес"
+                            value={set.weight || ''}
+                            onChange={e => updateBackoffSet(slot.category, idx, 'weight', e.target.value)}
+                            style={{ width: '70px' }}
+                          />
+                          <span>кг x</span>
+                          <input
+                            type="number"
+                            placeholder="Повт"
+                            value={set.reps || ''}
+                            onChange={e => updateBackoffSet(slot.category, idx, 'reps', e.target.value)}
+                            style={{ width: '60px' }}
+                          />
                           <span>— {pct}% ПДМ</span>
-                          {isFreeMode && <button onClick={() => {}} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>✕</button>}
+                          <button onClick={() => removeBackoffSet(slot.category, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                            ✕
+                          </button>
                         </div>
                       );
                     })}
+                    {entry.backoffSets.length < 5 && (
+                      <button onClick={() => addBackoffSet(slot.category)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        ➕ Добавить подход
+                      </button>
+                    )}
                     <div style={{ marginTop: '10px' }}>
                       <label>RPE последнего подхода: </label>
-                      <input type="number" step="0.5" min="6" max="10" value={entry.lastBackoffRPE} onChange={e => updateField(slot.category, 'lastBackoffRPE', e.target.value)} style={{ width: '60px' }} />
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="6"
+                        max="10"
+                        value={entry.lastBackoffRPE}
+                        onChange={e => updateField(slot.category, 'lastBackoffRPE', e.target.value)}
+                        style={{ width: '60px' }}
+                      />
                     </div>
+                  </div>
+                )}
+                {deloadInfo[slot.category]?.shouldDeload && (
+                  <div style={{ background: '#fff3cd', padding: '8px', marginTop: '8px', borderRadius: '5px' }}>
+                    ⚠️ ПДМ упал на {deloadInfo[slot.category]!.percentDrop.toFixed(1)}% по сравнению с прошлой тренировкой. Применена разгрузка.
                   </div>
                 )}
               </>
             ) : (
-              <div>
+              /* Свободный режим для free-упражнений */
+              <>
                 <p style={{ fontStyle: 'italic' }}>Свободный режим — добавь подходы:</p>
                 {entry.backoffSets.map((set, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '10px', marginBottom: '5px' }}>
-                    <input type="number" placeholder="Вес" value={set.weight || ''} onChange={e => {}} style={{ width: '70px' }} />
-                    <input type="number" placeholder="Повт" value={set.reps || ''} onChange={e => {}} style={{ width: '60px' }} />
-                    <button onClick={() => {}} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px' }}>✕</button>
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                    <input
+                      type="number"
+                      placeholder="Вес"
+                      value={set.weight || ''}
+                      onChange={e => updateBackoffSet(slot.category, idx, 'weight', e.target.value)}
+                      style={{ width: '70px' }}
+                    />
+                    <span>кг x</span>
+                    <input
+                      type="number"
+                      placeholder="Повт"
+                      value={set.reps || ''}
+                      onChange={e => updateBackoffSet(slot.category, idx, 'reps', e.target.value)}
+                      style={{ width: '60px' }}
+                    />
+                    <button onClick={() => removeBackoffSet(slot.category, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px' }}>
+                      ✕
+                    </button>
                   </div>
                 ))}
-                <button onClick={() => {}} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px' }}>➕ Добавить подход</button>
-              </div>
+                {entry.backoffSets.length < 10 && (
+                  <button onClick={() => addBackoffSet(slot.category)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                    ➕ Добавить подход
+                  </button>
+                )}
+                <div style={{ marginTop: '10px' }}>
+                  <label>RPE последнего подхода: </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="6"
+                    max="10"
+                    value={entry.lastBackoffRPE}
+                    onChange={e => updateField(slot.category, 'lastBackoffRPE', e.target.value)}
+                    style={{ width: '60px' }}
+                  />
+                </div>
+              </>
             )}
           </div>
         );
