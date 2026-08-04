@@ -102,23 +102,27 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     URL.revokeObjectURL(url);
   };
 
-  // Импорт через лейбл – никаких рефов и программных кликов
+  // Импорт с обработкой результата
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const text = ev.target?.result as string;
-    if (!text) return;
-    const count = importLogsFromCSV(text);
-    setImportMessage(`Импортировано тренировок: ${count}`);
-    refreshLogs();
-    // убираем сообщение через 5 секунд
-    setTimeout(() => setImportMessage(null), 5000);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (!text) return;
+      const { count, error } = importLogsFromCSV(text);
+      if (error) {
+        setImportMessage(`Ошибка: ${error}`);
+        setTimeout(() => setImportMessage(null), 6000);
+      } else {
+        setImportMessage(`Импортировано тренировок: ${count}`);
+        refreshLogs();
+        setTimeout(() => setImportMessage(null), 5000);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+    e.target.value = '';
   };
-  reader.readAsText(file, 'UTF-8');
-  e.target.value = ''; // сброс
-};
 
   // Графики и таблица (без изменений)
   const uniqueExercises = Array.from(
@@ -156,74 +160,71 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
-        {/* 👇 ВСТАВЬ ЭТО СРАЗУ ПОСЛЕ ЗАГОЛОВКА 👇 */}
-{importMessage && (
-  <div style={{ background: '#d4edda', color: '#155724', padding: '8px', borderRadius: '5px', marginBottom: '10px' }}>
-    {importMessage}
-  </div>
-)}
-
-       <div style={{ display: 'flex', gap: '8px' }}>
-  {/* Кнопка импорта с прозрачным инпутом поверх */}
-  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-    <button
-      style={{
-        padding: '8px 16px',
-        backgroundColor: '#4CAF50',
-        color: 'white',
-        border: 'none',
-        borderRadius: '5px',
-        cursor: 'pointer',
-        pointerEvents: 'none', // клик проходит сквозь кнопку к инпуту
-      }}
-    >
-      📥 Импорт CSV
-    </button>
-    <input
-      type="file"
-      accept=".csv, text/csv"
-      onChange={handleFileChange}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        opacity: 0,
-        cursor: 'pointer',
-      }}
-    />
-  </div>
-
-  <button
-    onClick={exportToCSV}
-    style={{
-      padding: '8px 16px',
-      backgroundColor: '#2196F3',
-      color: 'white',
-      border: 'none',
-      borderRadius: '5px',
-      cursor: 'pointer',
-    }}
-  >
-    📤 Экспорт CSV
-  </button>
-
-  <button
-    onClick={handleClearAll}
-    style={{
-      padding: '8px 16px',
-      backgroundColor: '#f44336',
-      color: 'white',
-      border: 'none',
-      borderRadius: '5px',
-      cursor: 'pointer',
-    }}
-  >
-    Очистить всё
-  </button>
-</div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Кнопка импорта с прозрачным инпутом */}
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <button
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                pointerEvents: 'none',
+              }}
+            >
+              📥 Импорт CSV
+            </button>
+            <input
+              type="file"
+              accept=".csv, text/csv"
+              onChange={handleFileChange}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+          <button
+            onClick={exportToCSV}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+            }}
+          >
+            📤 Экспорт CSV
+          </button>
+          <button
+            onClick={handleClearAll}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+            }}
+          >
+            Очистить всё
+          </button>
+        </div>
       </div>
+
+      {importMessage && (
+        <div style={{ background: '#d4edda', color: '#155724', padding: '8px', borderRadius: '5px', margin: '10px 0' }}>
+          {importMessage}
+        </div>
+      )}
 
       <div style={{ marginBottom: '20px', marginTop: '15px' }}>
         <label>Показать динамику для: </label>
@@ -234,7 +235,6 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
         </select>
       </div>
 
-      {/* Графики */}
       <h3>Динамика ПДМ</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData}>

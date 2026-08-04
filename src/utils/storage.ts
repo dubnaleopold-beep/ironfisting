@@ -118,15 +118,20 @@ export const clearAllLogs = (): void => {
   localStorage.removeItem(STORAGE_KEY);
 };
 
-// --- Импорт из CSV ---
-export const importLogsFromCSV = (csvText: string): number => {
+// --- Импорт из CSV (поддержка старого и нового формата) ---
+export const importLogsFromCSV = (csvText: string): { count: number; error?: string } => {
   const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  if (lines.length === 0) return 0;
+  if (lines.length === 0) return { count: 0, error: 'Файл пуст' };
 
   const header = lines[0];
-  if (!header.includes('Exercise ID')) {
-    console.error('CSV не содержит столбец Exercise ID. Используйте обновлённый экспорт.');
-    return 0;
+  const columns = header.split(';').map(c => c.trim());
+
+  // Определяем формат
+  const hasExerciseID = columns.includes('Exercise ID');
+  const hasExerciseName = columns.includes('Упражнение'); // старый формат
+
+  if (!hasExerciseID && !hasExerciseName) {
+    return { count: 0, error: 'Не найден столбец "Exercise ID" или "Упражнение". Проверьте файл.' };
   }
 
   const dataLines = lines.slice(1);
@@ -134,32 +139,66 @@ export const importLogsFromCSV = (csvText: string): number => {
 
   for (const line of dataLines) {
     const cols = line.split(';');
-    if (cols.length < 11) continue;
+    if (cols.length < 6) continue; // минимальное количество полей
 
-    const dateStr = cols[0];
-    const dayName = cols[1];
-    const cycleStr = cols[2];
-    const exerciseId = cols[3];
-    const exerciseCategory = cols[4];
-    const pdm = parseFloat(cols[5]) || 0;
-    const tonnage = parseFloat(cols[6]) || 0;
-    const kpsh = parseFloat(cols[7]) || 0;
-    const topWeight = parseFloat(cols[8]) || 0;
-    const topReps = parseInt(cols[9]) || 0;
-    const topRPE = parseFloat(cols[10]) || 0;
+    let dateStr: string, dayName: string, cycleStr: string;
+    let exerciseId: string, exerciseCategory: string;
+    let pdm: number, tonnage: number, kpsh: number;
+    let topWeight: number, topReps: number, topRPE: number;
+    let backoffSets: { weight: number; reps: number }[] = [];
+    let lastBackoffRPE: number | null = null;
 
-    const backoffSets: { weight: number; reps: number }[] = [];
-    let idx = 11;
-    for (let i = 0; i < 5; i++) {
-      const w = parseFloat(cols[idx] || '0');
-      const r = parseInt(cols[idx + 1] || '0');
-      if (!isNaN(w) && !isNaN(r) && (w > 0 || r > 0)) {
-        backoffSets.push({ weight: w, reps: r });
+    if (hasExerciseID) {
+      // Новый формат: 0-дата,1-день,2-цикл,3-ExerciseID,4-категория,5-ПДМ,6-Тоннаж,7-КПШ,8-топ вес,9-топ повт,10-топ RPE, затем 5 пар (вес,повт), затем RPE последнего
+      dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
+      exerciseId = cols[3]; exerciseCategory = cols[4];
+      pdm = parseFloat(cols[5]) || 0;
+      tonnage = parseFloat(cols[6]) || 0;
+      kpsh = parseFloat(cols[7]) || 0;
+      topWeight = parseFloat(cols[8]) || 0;
+      topReps = parseInt(cols[9]) || 0;
+      topRPE = parseFloat(cols[10]) || 0;
+
+      let idx = 11;
+      for (let i = 0; i < 5; i++) {
+        const w = parseFloat(cols[idx] || '0');
+        const r = parseInt(cols[idx + 1] || '0');
+        if (!isNaN(w) && !isNaN(r) && (w > 0 || r > 0)) {
+          backoffSets.push({ weight: w, reps: r });
+        }
+        idx += 2;
       }
-      idx += 2;
-    }
-    const lastBackoffRPE = cols[idx] ? parseFloat(cols[idx]) : null;
+      if (cols[idx]) lastBackoffRPE = parseFloat(cols[idx]) || null;
 
+    } else {
+      // Старый формат: 0-дата,1-день,2-цикл,3-упражнение(категория),4-ПДМ,5-Тоннаж,6-КПШ,7-топ вес,8-топ повт,9-топ RPE,10-бэкоф-сеты (строка),11-RPE последнего
+      dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
+      exerciseId = cols[3]; // в старом формате здесь название категории, используем его как ID
+      exerciseCategory = cols[3];
+      pdm = parseFloat(cols[4]) || 0;
+      tonnage = parseFloat(cols[5]) || 0;
+      kpsh = parseFloat(cols[6]) || 0;
+      topWeight = parseFloat(cols[7]) || 0;
+      topReps = parseInt(cols[8]) || 0;
+      topRPE = parseFloat(cols[9]) || 0;
+
+      // бэкоф-сеты в одном столбце: "105x5; 105x5" или "105x5"
+      const backoffRaw = cols[10] || '';
+      if (backoffRaw) {
+        const parts = backoffRaw.split(';');
+        for (const part of parts) {
+          const match = part.trim().match(/(\d+(?:\.\d+)?)\s*x\s*(\d+)/i);
+          if (match) {
+            const w = parseFloat(match[1]);
+            const r = parseInt(match[2]);
+            if (!isNaN(w) && !isNaN(r)) backoffSets.push({ weight: w, reps: r });
+          }
+        }
+      }
+      if (cols[11]) lastBackoffRPE = parseFloat(cols[11]) || null;
+    }
+
+    // дата
     const parts = dateStr.split('.');
     if (parts.length !== 3) continue;
     const day = parseInt(parts[0]), month = parseInt(parts[1]) - 1, year = parseInt(parts[2]);
@@ -212,5 +251,5 @@ export const importLogsFromCSV = (csvText: string): number => {
   });
   currentLogs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   localStorage.setItem(STORAGE_KEY, JSON.stringify(currentLogs));
-  return addedCount;
+  return { count: addedCount };
 };
