@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { loadLogs, deleteLogByIndex, clearAllLogs, importLogsFromCSV } from '../utils/storage';
 import type { WorkoutLog } from '../utils/storage';
 import {
@@ -16,7 +16,6 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<string>('barbell_bench');
   const [editingLog, setEditingLog] = useState<{ log: WorkoutLog; index: number } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loaded = loadLogs();
@@ -69,7 +68,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
           date,
           log.dayName,
           cycle,
-          ex.exerciseId,   // добавили ID
+          ex.exerciseId,
           ex.category,
           ex.pdm.toString(),
           (ex.tonnage || 0).toString(),
@@ -102,11 +101,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     URL.revokeObjectURL(url);
   };
 
-  // Импорт
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
+  // Импорт через лейбл – никаких рефов и программных кликов
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -119,8 +114,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       refreshLogs();
     };
     reader.readAsText(file, 'UTF-8');
-    // сброс, чтобы можно было выбрать тот же файл повторно
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    e.target.value = ''; // сброс, чтобы можно было выбрать тот же файл повторно
   };
 
   // Графики и таблица (без изменений)
@@ -160,27 +154,28 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
-         <label
-  style={{
-    padding: '8px 16px',
-    backgroundColor: '#4CAF50',
-    color: 'white',
-    border: 'none',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-  }}
->
-  📥 Импорт CSV
-  <input
-    type="file"
-    accept=".csv, text/csv"
-    onChange={handleFileChange}
-    style={{ display: 'none' }}
-  />
-</label>
+          {/* Лейбл-кнопка импорта */}
+          <label
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            📥 Импорт CSV
+            <input
+              type="file"
+              accept=".csv, text/csv"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+          </label>
           <button
             onClick={exportToCSV}
             style={{
