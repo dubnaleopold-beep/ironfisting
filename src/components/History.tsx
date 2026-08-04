@@ -153,56 +153,66 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {/* Лейбл-кнопка импорта */}
-          <label
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            📥 Импорт CSV
-            <input
-              type="file"
-              accept=".csv, text/csv"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-            />
-          </label>
-          <button
-            onClick={exportToCSV}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-            }}
-          >
-            📤 Экспорт CSV
-          </button>
-          <button
-            onClick={handleClearAll}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-            }}
-          >
-            Очистить всё
-          </button>
-        </div>
+       <div style={{ display: 'flex', gap: '8px' }}>
+  {/* Кнопка импорта с прозрачным инпутом поверх */}
+  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+    <button
+      style={{
+        padding: '8px 16px',
+        backgroundColor: '#4CAF50',
+        color: 'white',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        pointerEvents: 'none', // клик проходит сквозь кнопку к инпуту
+      }}
+    >
+      📥 Импорт CSV
+    </button>
+    <input
+      type="file"
+      accept=".csv, text/csv"
+      onChange={handleFileChange}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        opacity: 0,
+        cursor: 'pointer',
+      }}
+    />
+  </div>
+
+  <button
+    onClick={exportToCSV}
+    style={{
+      padding: '8px 16px',
+      backgroundColor: '#2196F3',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+    }}
+  >
+    📤 Экспорт CSV
+  </button>
+
+  <button
+    onClick={handleClearAll}
+    style={{
+      padding: '8px 16px',
+      backgroundColor: '#f44336',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+    }}
+  >
+    Очистить всё
+  </button>
+</div>
       </div>
 
       <div style={{ marginBottom: '20px', marginTop: '15px' }}>
