@@ -16,6 +16,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<string>('barbell_bench');
   const [editingLog, setEditingLog] = useState<{ log: WorkoutLog; index: number } | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const loaded = loadLogs();
@@ -103,19 +104,21 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
 
   // Импорт через лейбл – никаких рефов и программных кликов
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      if (!text) return;
-      const count = importLogsFromCSV(text);
-      alert(`Импортировано тренировок: ${count}`);
-      refreshLogs();
-    };
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = ''; // сброс, чтобы можно было выбрать тот же файл повторно
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = ev.target?.result as string;
+    if (!text) return;
+    const count = importLogsFromCSV(text);
+    setImportMessage(`Импортировано тренировок: ${count}`);
+    refreshLogs();
+    // убираем сообщение через 5 секунд
+    setTimeout(() => setImportMessage(null), 5000);
   };
+  reader.readAsText(file, 'UTF-8');
+  e.target.value = ''; // сброс
+};
 
   // Графики и таблица (без изменений)
   const uniqueExercises = Array.from(
@@ -153,6 +156,13 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
+        {/* 👇 ВСТАВЬ ЭТО СРАЗУ ПОСЛЕ ЗАГОЛОВКА 👇 */}
+{importMessage && (
+  <div style={{ background: '#d4edda', color: '#155724', padding: '8px', borderRadius: '5px', marginBottom: '10px' }}>
+    {importMessage}
+  </div>
+)}
+
        <div style={{ display: 'flex', gap: '8px' }}>
   {/* Кнопка импорта с прозрачным инпутом поверх */}
   <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
