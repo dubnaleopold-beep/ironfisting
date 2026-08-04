@@ -1,0 +1,301 @@
+import { useEffect, useState } from 'react';
+import { loadLogs, deleteLogByIndex, clearAllLogs } from '../utils/storage';
+import type { WorkoutLog } from '../utils/storage';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+import EditWorkout from './EditWorkout';
+
+interface HistoryProps {
+  onBackToMain: () => void;
+}
+
+const MAX_BACKOFF_SETS = 5; // максимальное количество бэкоф-сетов, которое мы выводим в экспорт
+
+const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
+  const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [selectedExercise, setSelectedExercise] = useState<string>('barbell_bench');
+  const [editingLog, setEditingLog] = useState<{ log: WorkoutLog; index: number } | null>(null);
+
+  useEffect(() => {
+    const loaded = loadLogs();
+    loaded.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setLogs(loaded);
+  }, []);
+
+  const refreshLogs = () => {
+    const loaded = loadLogs();
+    loaded.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setLogs(loaded);
+    setEditingLog(null);
+  };
+
+  const handleDelete = (index: number) => {
+    if (window.confirm('Удалить эту тренировку?')) {
+      deleteLogByIndex(index);
+      refreshLogs();
+    }
+  };
+
+  const handleClearAll = () => {
+    if (window.confirm('Удалить ВСЮ историю? Это необратимо!')) {
+      clearAllLogs();
+      refreshLogs();
+    }
+  };
+
+  const exportToCSV = () => {
+    // Разделитель — точка с запятой для корректного открытия в Excel
+    const sep = ';';
+    const rows: string[] = [];
+
+    // Заголовок
+    const headerCols = [
+      'Дата', 'День', 'Цикл', 'Упражнение', 'ПДМ (кг)', 'Тоннаж (кг)', 'КПШ',
+      'Топ-сет вес (кг)', 'Топ-сет повторы', 'Топ-сет RPE'
+    ];
+    // Добавляем столбцы для каждого бэкоф-сета (вес, повторы)
+    for (let i = 1; i <= MAX_BACKOFF_SETS; i++) {
+      headerCols.push(`Бэкоф-сет ${i} вес (кг)`);
+      headerCols.push(`Бэкоф-сет ${i} повторы`);
+    }
+    headerCols.push('RPE последнего подхода');
+    rows.push(headerCols.join(sep));
+
+    // Данные
+    logs.forEach(log => {
+      const date = new Date(log.date).toLocaleDateString('ru-RU');
+      const cycle = log.macrocycleId ? `${log.macrocycleId} нед.${log.week || ''}` : 'свободная';
+      log.exercises.forEach(ex => {
+        const cols = [
+          date,
+          log.dayName,
+          cycle,
+          ex.category,
+          ex.pdm.toString(),
+          (ex.tonnage || 0).toString(),
+          (ex.kpsh || 0).toString(),
+          ex.topSet?.weight?.toString() || '',
+          ex.topSet?.reps?.toString() || '',
+          ex.topSet?.rpe?.toString() || ''
+        ];
+
+        // Бэкоф-сеты: заполняем до MAX_BACKOFF_SETS
+        const backoffSets = ex.backoffSets || [];
+        for (let i = 0; i < MAX_BACKOFF_SETS; i++) {
+          if (i < backoffSets.length) {
+            cols.push(backoffSets[i].weight.toString());
+            cols.push(backoffSets[i].reps.toString());
+          } else {
+            cols.push('', '');
+          }
+        }
+
+        // RPE последнего подхода
+        cols.push(ex.lastBackoffRPE?.toString() || '');
+
+        rows.push(cols.join(sep));
+      });
+    });
+
+    // Собираем CSV с BOM для корректной кодировки в Excel
+    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ironfisting_history_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const uniqueExercises = Array.from(
+    new Set(logs.flatMap(log => log.exercises.map(e => e.exerciseId)))
+  );
+
+  const chartData = logs
+    .filter(log => log.exercises.some(e => e.exerciseId === selectedExercise))
+    .map((log, index) => {
+      const ex = log.exercises.find(e => e.exerciseId === selectedExercise)!;
+      return {
+        date: new Date(log.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }),
+        pdm: ex.pdm,
+        tonnage: ex.tonnage || 0,
+        kpsh: ex.kpsh || 0,
+        cycle: log.macrocycleId ? `${log.macrocycleId} нед.${log.week}` : 'свободная',
+        index,
+      };
+    });
+
+  if (editingLog) {
+    return (
+      <div>
+        <EditWorkout
+          log={editingLog.log}
+          index={editingLog.index}
+          onCancel={() => setEditingLog(null)}
+          onSaved={refreshLogs}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={exportToCSV}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+            }}
+          >
+            📥 Экспорт CSV
+          </button>
+          <button
+            onClick={handleClearAll}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+            }}
+          >
+            Очистить всё
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '20px', marginTop: '15px' }}>
+        <label>Показать динамику для: </label>
+        <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={{ padding: '5px' }}>
+          {uniqueExercises.map(id => (
+            <option key={id} value={id}>{id}</option>
+          ))}
+        </select>
+      </div>
+
+      <h3>Динамика ПДМ</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line type="monotone" dataKey="pdm" stroke="#8884d8" name="ПДМ (кг)" />
+        </LineChart>
+      </ResponsiveContainer>
+
+      <h3>Тоннаж и КПШ за тренировку</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" />
+          <YAxis yAxisId="left" />
+          <YAxis yAxisId="right" orientation="right" />
+          <Tooltip />
+          <Legend />
+          <Line yAxisId="left" type="monotone" dataKey="tonnage" stroke="#82ca9d" name="Тоннаж (кг)" />
+          <Line yAxisId="right" type="monotone" dataKey="kpsh" stroke="#ff7300" name="КПШ" />
+        </LineChart>
+      </ResponsiveContainer>
+
+      <h3>Все записи</h3>
+      <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+          <thead>
+            <tr style={{ background: '#f5f5f5' }}>
+              <th style={thStyle}>Дата</th>
+              <th style={thStyle}>День</th>
+              <th style={thStyle}>Упражнение</th>
+              <th style={thStyle}>ПДМ, кг</th>
+              <th style={thStyle}>Тоннаж, кг</th>
+              <th style={thStyle}>КПШ</th>
+              <th style={thStyle}>Топ-сет</th>
+              <th style={thStyle}>Бэкоф-сеты</th>
+              <th style={thStyle}>RPE посл.</th>
+              <th style={thStyle}>Действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.slice().reverse().map((log, reversedIndex) => {
+              const originalIndex = logs.length - 1 - reversedIndex;
+              return log.exercises.map((ex, exIdx) => (
+                <tr key={`${originalIndex}-${exIdx}`} style={{ borderBottom: '1px solid #ddd' }}>
+                  {exIdx === 0 && (
+                    <>
+                      <td rowSpan={log.exercises.length} style={tdStyle}>{new Date(log.date).toLocaleDateString('ru-RU')}</td>
+                      <td rowSpan={log.exercises.length} style={tdStyle}>{log.dayName}</td>
+                    </>
+                  )}
+                  <td style={tdStyle}>{ex.category}</td>
+                  <td style={tdStyle}>{ex.pdm}</td>
+                  <td style={tdStyle}>{ex.tonnage || 0}</td>
+                  <td style={tdStyle}>{ex.kpsh || 0}</td>
+                  <td style={tdStyle}>{ex.topSet?.weight || '?'} кг x {ex.topSet?.reps || '?'} @ {ex.topSet?.rpe || '?'}</td>
+                  <td style={tdStyle}>{ex.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
+                  <td style={tdStyle}>{ex.lastBackoffRPE || '—'}</td>
+                  {exIdx === 0 && (
+                    <td rowSpan={log.exercises.length} style={tdStyle}>
+                      <button
+                        onClick={() => setEditingLog({ log, index: originalIndex })}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginRight: '4px',
+                        }}
+                      >
+                        Ред.
+                      </button>
+                      <button
+                        onClick={() => handleDelete(originalIndex)}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: '#ff9800',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ));
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '8px',
+  textAlign: 'left',
+  borderBottom: '2px solid #ccc',
+  whiteSpace: 'nowrap',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '8px',
+  verticalAlign: 'top',
+};
+
+export default History;
