@@ -119,7 +119,8 @@ export const clearAllLogs = (): void => {
 };
 
 // --- Импорт из CSV (поддержка старого и нового формата) ---
-export const importLogsFromCSV = (csvText: string): { count: number; error?: string } => {
+// --- Импорт из CSV (поддержка старого и нового формата) ---
+export const importLogsFromCSV = (csvText: string): { count: number; error?: string; totalExercises?: number } => {
   const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   if (lines.length === 0) return { count: 0, error: 'Файл пуст' };
 
@@ -138,7 +139,8 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
   const logsMap = new Map<string, WorkoutLog>();
 
   for (const line of dataLines) {
-    const cols = line.split(';');
+    // Разбиваем с учётом возможных кавычек (но наш экспорт без кавычек, однако на всякий случай чистим)
+    const cols = line.split(';').map(c => c.trim().replace(/^"(.*)"$/, '$1')); // убираем обрамляющие кавычки
     if (cols.length < 6) continue; // минимальное количество полей
 
     let dateStr: string, dayName: string, cycleStr: string;
@@ -149,7 +151,7 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
     let lastBackoffRPE: number | null = null;
 
     if (hasExerciseID) {
-      // Новый формат: 0-дата,1-день,2-цикл,3-ExerciseID,4-категория,5-ПДМ,6-Тоннаж,7-КПШ,8-топ вес,9-топ повт,10-топ RPE, затем 5 пар (вес,повт), затем RPE последнего
+      // Новый формат
       dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
       exerciseId = cols[3]; exerciseCategory = cols[4];
       pdm = parseFloat(cols[5]) || 0;
@@ -171,9 +173,10 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
       if (cols[idx]) lastBackoffRPE = parseFloat(cols[idx]) || null;
 
     } else {
-      // Старый формат: 0-дата,1-день,2-цикл,3-упражнение(категория),4-ПДМ,5-Тоннаж,6-КПШ,7-топ вес,8-топ повт,9-топ RPE,10-бэкоф-сеты (строка),11-RPE последнего
+      // Старый формат (без Exercise ID, бэкоф-сеты в одной колонке)
+      // Индексы: 0-дата,1-день,2-цикл,3-упражнение(категория),4-ПДМ,5-Тоннаж,6-КПШ,7-топ вес,8-топ повт,9-топ RPE,10-бэкоф-сеты,11-RPE последнего
       dateStr = cols[0]; dayName = cols[1]; cycleStr = cols[2];
-      exerciseId = cols[3]; // в старом формате здесь название категории, используем его как ID
+      exerciseId = cols[3]; // используем как ID
       exerciseCategory = cols[3];
       pdm = parseFloat(cols[4]) || 0;
       tonnage = parseFloat(cols[5]) || 0;
@@ -182,10 +185,13 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
       topReps = parseInt(cols[8]) || 0;
       topRPE = parseFloat(cols[9]) || 0;
 
-      // бэкоф-сеты в одном столбце: "105x5; 105x5" или "105x5"
+      // бэкоф-сеты: может быть что-то вроде "105x5; 105x5" или "105x5 ; 105x5"
       const backoffRaw = cols[10] || '';
-      if (backoffRaw) {
-        const parts = backoffRaw.split(';');
+      if (backoffRaw && backoffRaw !== '—') {
+        // Убираем возможные кавычки и лишние пробелы
+        const clean = backoffRaw.replace(/"/g, '').trim();
+        // Разбиваем по ; или , (на случай разных разделителей)
+        const parts = clean.split(/[;,]/);
         for (const part of parts) {
           const match = part.trim().match(/(\d+(?:\.\d+)?)\s*x\s*(\d+)/i);
           if (match) {
@@ -195,7 +201,10 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
           }
         }
       }
-      if (cols[11]) lastBackoffRPE = parseFloat(cols[11]) || null;
+      // RPE последнего: может быть в cols[11], если есть
+      if (cols.length > 11 && cols[11] && cols[11] !== '—') {
+        lastBackoffRPE = parseFloat(cols[11]) || null;
+      }
     }
 
     // дата
@@ -251,5 +260,5 @@ export const importLogsFromCSV = (csvText: string): { count: number; error?: str
   });
   currentLogs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   localStorage.setItem(STORAGE_KEY, JSON.stringify(currentLogs));
-  return { count: addedCount };
+  return { count: addedCount, totalExercises: logsMap.size };
 };

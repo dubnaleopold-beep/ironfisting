@@ -103,26 +103,26 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
   };
 
   // Импорт с обработкой результата
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      if (!text) return;
-      const { count, error } = importLogsFromCSV(text);
-      if (error) {
-        setImportMessage(`Ошибка: ${error}`);
-        setTimeout(() => setImportMessage(null), 6000);
-      } else {
-        setImportMessage(`Импортировано тренировок: ${count}`);
-        refreshLogs();
-        setTimeout(() => setImportMessage(null), 5000);
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
+ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const text = ev.target?.result as string;
+    if (!text) return;
+    const { count, error, totalExercises } = importLogsFromCSV(text);
+    if (error) {
+      setImportMessage(`❌ Ошибка: ${error}`);
+      setTimeout(() => setImportMessage(null), 6000);
+    } else {
+      setImportMessage(`✅ Импортировано тренировок: ${count}, упражнений: ${totalExercises || 0}`);
+      refreshLogs();
+      setTimeout(() => setImportMessage(null), 5000);
+    }
   };
+  reader.readAsText(file, 'UTF-8');
+  e.target.value = '';
+};
 
   // Графики и таблица (без изменений)
   const uniqueExercises = Array.from(
