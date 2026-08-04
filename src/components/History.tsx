@@ -160,26 +160,27 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="file"
-            accept=".csv"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
-          <button
-            onClick={handleImportClick}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-            }}
-          >
-            📥 Импорт CSV
-          </button>
+         <label
+  style={{
+    padding: '8px 16px',
+    backgroundColor: '#4CAF50',
+    color: 'white',
+    border: 'none',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+  }}
+>
+  📥 Импорт CSV
+  <input
+    type="file"
+    accept=".csv, text/csv"
+    onChange={handleFileChange}
+    style={{ display: 'none' }}
+  />
+</label>
           <button
             onClick={exportToCSV}
             style={{
