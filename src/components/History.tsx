@@ -17,6 +17,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
   const [selectedExercise, setSelectedExercise] = useState<string>('barbell_bench');
   const [editingLog, setEditingLog] = useState<{ log: WorkoutLog; index: number } | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'day' | 'exercise'>('day');
 
   useEffect(() => {
     const loaded = loadLogs();
@@ -45,7 +46,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     }
   };
 
-  // Экспорт с Exercise ID
+  // Экспорт с Exercise ID (полный, без урезаний)
   const exportToCSV = () => {
     const sep = ';';
     const rows: string[] = [];
@@ -102,7 +103,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     URL.revokeObjectURL(url);
   };
 
-  // Импорт с обработкой результата
+  // Импорт CSV
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -124,7 +125,6 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     e.target.value = '';
   };
 
-  // Графики и таблица (без изменений)
   const uniqueExercises = Array.from(
     new Set(logs.flatMap(log => log.exercises.map(e => e.exerciseId)))
   );
@@ -142,6 +142,17 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
         index,
       };
     });
+
+  // Данные для таблицы "по упражнению"
+  const exerciseTableData = logs.flatMap(log =>
+    log.exercises
+      .filter(e => e.exerciseId === selectedExercise)
+      .map(e => ({
+        date: log.date,
+        dayName: log.dayName,
+        ...e,
+      }))
+  ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (editingLog) {
     return (
@@ -161,80 +172,33 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <h2 onClick={onBackToMain} style={{ cursor: 'pointer', margin: 0 }}>IronFisting — История</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {/* Кнопка импорта с прозрачным инпутом */}
           <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <button
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                pointerEvents: 'none',
-              }}
-            >
+            <button style={{ padding: '8px 16px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', pointerEvents: 'none' }}>
               📥 Импорт CSV
             </button>
-            <input
-              type="file"
-              accept=".csv, text/csv"
-              onChange={handleFileChange}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                cursor: 'pointer',
-              }}
-            />
+            <input type="file" accept=".csv, text/csv" onChange={handleFileChange} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
           </div>
-          <button
-            onClick={exportToCSV}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-            }}
-          >
-            📤 Экспорт CSV
-          </button>
-          <button
-            onClick={handleClearAll}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-            }}
-          >
-            Очистить всё
-          </button>
+          <button onClick={exportToCSV} style={{ padding: '8px 16px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>📤 Экспорт CSV</button>
+          <button onClick={handleClearAll} style={{ padding: '8px 16px', backgroundColor: '#f44336', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Очистить всё</button>
         </div>
       </div>
 
       {importMessage && (
-        <div style={{ background: '#d4edda', color: '#155724', padding: '8px', borderRadius: '5px', margin: '10px 0' }}>
-          {importMessage}
-        </div>
+        <div style={{ background: '#d4edda', color: '#155724', padding: '8px', borderRadius: '5px', margin: '10px 0' }}>{importMessage}</div>
       )}
 
       <div style={{ marginBottom: '20px', marginTop: '15px' }}>
         <label>Показать динамику для: </label>
         <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={{ padding: '5px' }}>
-          {uniqueExercises.map(id => (
-            <option key={id} value={id}>{id}</option>
-          ))}
+          {uniqueExercises.map(id => <option key={id} value={id}>{id}</option>)}
         </select>
+        <div style={{ marginTop: '10px' }}>
+          <button onClick={() => setViewMode('day')} style={{ marginRight: '10px', padding: '5px 15px', backgroundColor: viewMode === 'day' ? '#4CAF50' : '#ddd', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>По дням</button>
+          <button onClick={() => setViewMode('exercise')} style={{ padding: '5px 15px', backgroundColor: viewMode === 'exercise' ? '#4CAF50' : '#ddd', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>По упражнению</button>
+        </div>
       </div>
 
+      {/* Графики */}
       <h3>Динамика ПДМ</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData}>
@@ -261,63 +225,90 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
         </LineChart>
       </ResponsiveContainer>
 
-      <h3>Все записи</h3>
-      <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
-          <thead>
-            <tr style={{ background: '#f5f5f5' }}>
-              <th style={thStyle}>Дата</th>
-              <th style={thStyle}>День</th>
-              <th style={thStyle}>Упражнение</th>
-              <th style={thStyle}>ПДМ, кг</th>
-              <th style={thStyle}>Тоннаж, кг</th>
-              <th style={thStyle}>КПШ</th>
-              <th style={thStyle}>Топ-сет</th>
-              <th style={thStyle}>Бэкоф-сеты</th>
-              <th style={thStyle}>RPE посл.</th>
-              <th style={thStyle}>Действие</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.slice().reverse().map((log, reversedIndex) => {
-              const originalIndex = logs.length - 1 - reversedIndex;
-              return log.exercises.map((ex, exIdx) => (
-                <tr key={`${originalIndex}-${exIdx}`} style={{ borderBottom: '1px solid #ddd' }}>
-                  {exIdx === 0 && (
-                    <>
-                      <td rowSpan={log.exercises.length} style={tdStyle}>{new Date(log.date).toLocaleDateString('ru-RU')}</td>
-                      <td rowSpan={log.exercises.length} style={tdStyle}>{log.dayName}</td>
-                    </>
-                  )}
-                  <td style={tdStyle}>{ex.category}</td>
-                  <td style={tdStyle}>{ex.pdm}</td>
-                  <td style={tdStyle}>{ex.tonnage || 0}</td>
-                  <td style={tdStyle}>{ex.kpsh || 0}</td>
-                  <td style={tdStyle}>{ex.topSet?.weight || '?'} кг x {ex.topSet?.reps || '?'} @ {ex.topSet?.rpe || '?'}</td>
-                  <td style={tdStyle}>{ex.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
-                  <td style={tdStyle}>{ex.lastBackoffRPE || '—'}</td>
-                  {exIdx === 0 && (
-                    <td rowSpan={log.exercises.length} style={tdStyle}>
-                      <button
-                        onClick={() => setEditingLog({ log, index: originalIndex })}
-                        style={{ padding: '4px 8px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '4px' }}
-                      >
-                        Ред.
-                      </button>
-                      <button
-                        onClick={() => handleDelete(originalIndex)}
-                        style={{ padding: '4px 8px', backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        Удалить
-                      </button>
-                    </td>
-                  )}
+      {/* Таблицы */}
+      <h3>{viewMode === 'day' ? 'Все записи' : `История упражнения: ${selectedExercise}`}</h3>
+      {viewMode === 'day' ? (
+        <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5' }}>
+                <th style={thStyle}>Дата</th>
+                <th style={thStyle}>День</th>
+                <th style={thStyle}>Упражнение</th>
+                <th style={thStyle}>ПДМ, кг</th>
+                <th style={thStyle}>Тоннаж, кг</th>
+                <th style={thStyle}>КПШ</th>
+                <th style={thStyle}>Топ-сет</th>
+                <th style={thStyle}>Бэкоф-сеты</th>
+                <th style={thStyle}>RPE посл.</th>
+                <th style={thStyle}>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.slice().reverse().map((log, reversedIndex) => {
+                const originalIndex = logs.length - 1 - reversedIndex;
+                return log.exercises.map((ex, exIdx) => (
+                  <tr key={`${originalIndex}-${exIdx}`} style={{ borderBottom: '1px solid #ddd' }}>
+                    {exIdx === 0 && (
+                      <>
+                        <td rowSpan={log.exercises.length} style={tdStyle}>{new Date(log.date).toLocaleDateString('ru-RU')}</td>
+                        <td rowSpan={log.exercises.length} style={tdStyle}>{log.dayName}</td>
+                      </>
+                    )}
+                    <td style={tdStyle}>{ex.category}</td>
+                    <td style={tdStyle}>{ex.pdm}</td>
+                    <td style={tdStyle}>{ex.tonnage || 0}</td>
+                    <td style={tdStyle}>{ex.kpsh || 0}</td>
+                    <td style={tdStyle}>{ex.topSet?.weight || '?'} кг x {ex.topSet?.reps || '?'} @ {ex.topSet?.rpe || '?'}</td>
+                    <td style={tdStyle}>{ex.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
+                    <td style={tdStyle}>{ex.lastBackoffRPE || '—'}</td>
+                    {exIdx === 0 && (
+                      <td rowSpan={log.exercises.length} style={tdStyle}>
+                        <button onClick={() => setEditingLog({ log, index: originalIndex })} style={{ padding: '4px 8px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '4px' }}>Ред.</button>
+                        <button onClick={() => handleDelete(originalIndex)} style={{ padding: '4px 8px', backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Удалить</button>
+                      </td>
+                    )}
+                  </tr>
+                ));
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5' }}>
+                <th style={thStyle}>Дата</th>
+                <th style={thStyle}>День</th>
+                <th style={thStyle}>ПДМ, кг</th>
+                <th style={thStyle}>Тоннаж, кг</th>
+                <th style={thStyle}>КПШ</th>
+                <th style={thStyle}>Топ-сет</th>
+                <th style={thStyle}>Бэкоф-сеты</th>
+                <th style={thStyle}>RPE посл.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exerciseTableData.map((row, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #ddd' }}>
+                  <td style={tdStyle}>{new Date(row.date).toLocaleDateString('ru-RU')}</td>
+                  <td style={tdStyle}>{row.dayName}</td>
+                  <td style={tdStyle}>{row.pdm}</td>
+                  <td style={tdStyle}>{row.tonnage || 0}</td>
+                  <td style={tdStyle}>{row.kpsh || 0}</td>
+                  <td style={tdStyle}>{row.topSet?.weight || '?'} кг x {row.topSet?.reps || '?'} @ {row.topSet?.rpe || '?'}</td>
+                  <td style={tdStyle}>{row.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
+                  <td style={tdStyle}>{row.lastBackoffRPE || '—'}</td>
                 </tr>
-              ));
-            })}
-          </tbody>
-        </table>
-      </div>
+              ))}
+              {exerciseTableData.length === 0 && (
+                <tr><td colSpan={8} style={tdStyle}>Нет данных по выбранному упражнению</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

@@ -7,8 +7,8 @@ export interface Exercise {
   protocol: Protocol;
   category: string;
   alternatives?: string[];
-  warmupType: WarmupType;   // обязательно для всех
-  needsBodyweight?: boolean; // true для подтягиваний (требует ввода веса тела)
+  warmupType: WarmupType;
+  needsBodyweight?: boolean;
 }
 
 const exercises: Exercise[] = [
@@ -18,7 +18,7 @@ const exercises: Exercise[] = [
     name: 'Жим штанги лёжа',
     protocol: 'cns_activation',
     category: 'Грудные',
-    alternatives: ['dumbbell_bench', 'dips'],
+    alternatives: ['dumbbell_bench', 'dips', 'incline_barbell_bench', 'incline_dumbbell_bench'],
     warmupType: 'barbell',
   },
   {
@@ -26,7 +26,7 @@ const exercises: Exercise[] = [
     name: 'Жим гантелей лёжа',
     protocol: 'cns_activation',
     category: 'Грудные',
-    alternatives: ['barbell_bench', 'dips'],
+    alternatives: ['barbell_bench', 'dips', 'incline_barbell_bench', 'incline_dumbbell_bench'],
     warmupType: 'barbell',
   },
   {
@@ -35,7 +35,24 @@ const exercises: Exercise[] = [
     protocol: 'standard',
     category: 'Грудные',
     alternatives: ['barbell_bench', 'dumbbell_bench'],
-    warmupType: 'machine', // тренажёр/брусья, округление до 5 кг
+    warmupType: 'machine',
+  },
+  // НОВЫЕ: наклонная скамья
+  {
+    id: 'incline_barbell_bench',
+    name: 'Жим штанги на наклонной скамье',
+    protocol: 'cns_activation',
+    category: 'Грудные',
+    alternatives: ['barbell_bench', 'dumbbell_bench', 'incline_dumbbell_bench'],
+    warmupType: 'barbell',
+  },
+  {
+    id: 'incline_dumbbell_bench',
+    name: 'Жим гантелей на наклонной скамье',
+    protocol: 'cns_activation',
+    category: 'Грудные',
+    alternatives: ['barbell_bench', 'dumbbell_bench', 'incline_barbell_bench'],
+    warmupType: 'barbell',
   },
 
   // ================== НОГИ ==================
@@ -96,7 +113,7 @@ const exercises: Exercise[] = [
     category: 'Спина вертикальная',
     alternatives: ['lat_pulldown', 'hammer_pulldown'],
     warmupType: 'barbell',
-    needsBodyweight: true, // ← нужен ввод собственного веса
+    needsBodyweight: true,
   },
   {
     id: 'lat_pulldown',

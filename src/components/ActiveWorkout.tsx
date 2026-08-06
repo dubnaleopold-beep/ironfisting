@@ -33,7 +33,7 @@ interface DeloadResult {
 
 interface ActiveWorkoutProps {
   slots: ExerciseSlot[];
-  selectedExercises: Record<string, string>;
+  selectedExercises: Record<string, string>; // ключ – slot.id
   onFinish: () => void;
   dayIndex: number;
   onBack?: () => void;
@@ -52,7 +52,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     const draft = loadDraft(dayIndex, macrocycleId, currentWeek);
     const initEntry = (slot: ExerciseSlot): ExerciseEntry => ({
       slotCategory: slot.category,
-      exerciseId: selectedExercises[slot.category] || slot.defaultExerciseId,
+      exerciseId: selectedExercises[slot.id] || slot.defaultExerciseId,
       topSetWeight: '', topSetReps: '', topSetRPE: '', pdm: null,
       backoffSets: [], lastBackoffRPE: '',
       warmupSets: [], warmupChecked: [],
@@ -63,14 +63,14 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     if (draft && draft.dayIndex === dayIndex && draft.macrocycleId === macrocycleId && draft.currentWeek === currentWeek) {
       const restored: Record<string, ExerciseEntry> = {};
       slots.forEach(slot => {
-        const saved = draft.entries[slot.category];
+        const saved = draft.entries[slot.id];
         const def = initEntry(slot);
-        restored[slot.category] = saved ? { ...def, ...saved } : def;
+        restored[slot.id] = saved ? { ...def, ...saved } : def;
       });
       return restored;
     }
     const initial: Record<string, ExerciseEntry> = {};
-    slots.forEach(slot => { initial[slot.category] = initEntry(slot); });
+    slots.forEach(slot => { initial[slot.id] = initEntry(slot); });
     return initial;
   });
 
@@ -80,13 +80,14 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     saveDraft({ dayIndex, macrocycleId, currentWeek, entries });
   }, [entries, dayIndex, macrocycleId, currentWeek]);
 
-  // разминка для макроцикла (как раньше)
+  // разминка для макроцикла
   useEffect(() => {
     if (!macrocycleId || !microcycle || !currentWeek || currentWeek <= 1) return;
     setEntries(prev => {
       const updated = { ...prev };
       slots.forEach(slot => {
-        const entry = updated[slot.category];
+        const entry = updated[slot.id];
+        if (!entry) return;
         const exercise = exercisesData.find(e => e.id === entry.exerciseId);
         if (!exercise || exercise.protocol === 'free') return;
         const prevPDM = getLastPDM(entry.exerciseId);
@@ -99,7 +100,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
           warmupType: exercise.warmupType,
           bodyweight: exercise.needsBodyweight ? parseFloat(entry.bodyweight as string) || undefined : undefined,
         });
-        updated[slot.category] = {
+        updated[slot.id] = {
           ...entry,
           warmupSets: warmup,
           warmupChecked: warmup.map(() => false),
@@ -109,44 +110,50 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     });
   }, [macrocycleId, microcycle, currentWeek, slots]);
 
-  const updateField = (category: string, field: 'topSetWeight' | 'topSetReps' | 'topSetRPE' | 'lastBackoffRPE' | 'bodyweight', value: string) => {
-    setEntries(prev => ({
-      ...prev,
-      [category]: {
-        ...prev[category],
-        [field]: value,
-        pdm: field !== 'lastBackoffRPE' && field !== 'bodyweight' ? null : prev[category].pdm,
-        backoffSets: field !== 'lastBackoffRPE' && field !== 'bodyweight' ? [] : prev[category].backoffSets,
-      },
-    }));
-    setDeloadInfo(prev => ({ ...prev, [category]: null }));
-  };
-
-  const toggleWarmupCheck = (category: string, index: number) => {
+  const updateField = (slotId: string, field: 'topSetWeight' | 'topSetReps' | 'topSetRPE' | 'lastBackoffRPE' | 'bodyweight', value: string) => {
     setEntries(prev => {
-      const current = prev[category];
-      const newChecked = [...current.warmupChecked];
-      newChecked[index] = !newChecked[index];
-      return { ...prev, [category]: { ...current, warmupChecked: newChecked } };
-    });
-  };
-
-  const toggleBackoffCheck = (category: string, index: number) => {
-    setEntries(prev => {
-      const current = prev[category];
-      const newChecked = [...current.backoffChecked];
-      newChecked[index] = !newChecked[index];
-      return { ...prev, [category]: { ...current, backoffChecked: newChecked } };
-    });
-  };
-
-  const addBackoffSet = (category: string) => {
-    setEntries(prev => {
-      const current = prev[category];
-      if (current.backoffSets.length >= 5) return prev;
+      const current = prev[slotId];
+      if (!current) return prev;
       return {
         ...prev,
-        [category]: {
+        [slotId]: {
+          ...current,
+          [field]: value,
+          pdm: field !== 'lastBackoffRPE' && field !== 'bodyweight' ? null : current.pdm,
+          backoffSets: field !== 'lastBackoffRPE' && field !== 'bodyweight' ? [] : current.backoffSets,
+        },
+      };
+    });
+    setDeloadInfo(prev => ({ ...prev, [slotId]: null }));
+  };
+
+  const toggleWarmupCheck = (slotId: string, index: number) => {
+    setEntries(prev => {
+      const current = prev[slotId];
+      if (!current) return prev;
+      const newChecked = [...current.warmupChecked];
+      newChecked[index] = !newChecked[index];
+      return { ...prev, [slotId]: { ...current, warmupChecked: newChecked } };
+    });
+  };
+
+  const toggleBackoffCheck = (slotId: string, index: number) => {
+    setEntries(prev => {
+      const current = prev[slotId];
+      if (!current) return prev;
+      const newChecked = [...current.backoffChecked];
+      newChecked[index] = !newChecked[index];
+      return { ...prev, [slotId]: { ...current, backoffChecked: newChecked } };
+    });
+  };
+
+  const addBackoffSet = (slotId: string) => {
+    setEntries(prev => {
+      const current = prev[slotId];
+      if (!current || current.backoffSets.length >= 5) return prev;
+      return {
+        ...prev,
+        [slotId]: {
           ...current,
           backoffSets: [...current.backoffSets, { weight: 0, reps: 0 }],
           backoffChecked: [...current.backoffChecked, false],
@@ -155,26 +162,29 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     });
   };
 
-  const updateBackoffSet = (category: string, index: number, field: 'weight' | 'reps', value: string) => {
+  const updateBackoffSet = (slotId: string, index: number, field: 'weight' | 'reps', value: string) => {
     setEntries(prev => {
-      const current = prev[category];
+      const current = prev[slotId];
+      if (!current) return prev;
       const newSets = [...current.backoffSets];
       newSets[index] = { ...newSets[index], [field]: parseFloat(value) || 0 };
-      return { ...prev, [category]: { ...current, backoffSets: newSets } };
+      return { ...prev, [slotId]: { ...current, backoffSets: newSets } };
     });
   };
 
-  const removeBackoffSet = (category: string, index: number) => {
+  const removeBackoffSet = (slotId: string, index: number) => {
     setEntries(prev => {
-      const current = prev[category];
+      const current = prev[slotId];
+      if (!current) return prev;
       const newSets = current.backoffSets.filter((_, i) => i !== index);
       const newChecked = current.backoffChecked.filter((_, i) => i !== index);
-      return { ...prev, [category]: { ...current, backoffSets: newSets, backoffChecked: newChecked } };
+      return { ...prev, [slotId]: { ...current, backoffSets: newSets, backoffChecked: newChecked } };
     });
   };
 
-  const handleCalculate = (category: string) => {
-    const entry = entries[category];
+  const handleCalculate = (slotId: string) => {
+    const entry = entries[slotId];
+    if (!entry) return;
     const weight = parseFloat(entry.topSetWeight as string);
     const reps = parseInt(entry.topSetReps as string, 10);
     const rpe = parseFloat(entry.topSetRPE as string);
@@ -210,11 +220,9 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         backoffSets = [];
       }
 
-      // инициализируем backoffChecked под количество сетов
       const newBackoffChecked = backoffSets.map(() => false);
-
-      setEntries(prev => ({ ...prev, [category]: { ...prev[category], pdm, backoffSets, backoffChecked: newBackoffChecked } }));
-      setDeloadInfo(prev => ({ ...prev, [category]: deloadDecision }));
+      setEntries(prev => ({ ...prev, [slotId]: { ...prev[slotId], pdm, backoffSets, backoffChecked: newBackoffChecked } }));
+      setDeloadInfo(prev => ({ ...prev, [slotId]: deloadDecision }));
     } catch (e: any) {
       alert(e.message || 'Ошибка в расчёте.');
     }
@@ -278,7 +286,8 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         </h2>
       </div>
       {slots.map(slot => {
-        const entry = entries[slot.category];
+        const entry = entries[slot.id];
+        if (!entry) return null;
         const ex = exercisesData.find(e => e.id === entry.exerciseId);
         const isFree = ex?.protocol === 'free';
         const isFreeMode = !macrocycleId;
@@ -294,15 +303,15 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         const showWarmup = macrocycleId && currentWeek && currentWeek > 1 && !isFree && entry.warmupSets.length > 0;
 
         return (
-          <div key={slot.category} style={{ border: '1px solid #ddd', margin: '10px 0', padding: '15px', borderRadius: '8px' }}>
+          <div key={slot.id} style={{ border: '1px solid #ddd', margin: '10px 0', padding: '15px', borderRadius: '8px' }}>
             <h3>{getExerciseName(entry.exerciseId)} ({slot.category})</h3>
             {slot.alternatives.length > 1 && (
               <div style={{ marginBottom: '10px' }}>
                 <label>Заменить: </label>
                 <select value={entry.exerciseId} onChange={e => {
                   const newId = e.target.value;
-                  setEntries(prev => ({ ...prev, [slot.category]: { ...prev[slot.category], exerciseId: newId, topSetWeight: '', topSetReps: '', topSetRPE: '', pdm: null, backoffSets: [], lastBackoffRPE: '', warmupSets: [], warmupChecked: [], backoffChecked: [] } }));
-                  setDeloadInfo(prev => ({ ...prev, [slot.category]: null }));
+                  setEntries(prev => ({ ...prev, [slot.id]: { ...prev[slot.id], exerciseId: newId, topSetWeight: '', topSetReps: '', topSetRPE: '', pdm: null, backoffSets: [], lastBackoffRPE: '', warmupSets: [], warmupChecked: [], backoffChecked: [] } }));
+                  setDeloadInfo(prev => ({ ...prev, [slot.id]: null }));
                 }} style={{ padding: '5px' }}>
                   {slot.alternatives.map(altId => <option key={altId} value={altId}>{exercisesData.find(e => e.id === altId)?.name || altId}</option>)}
                 </select>
@@ -311,7 +320,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
             {ex?.needsBodyweight && (
               <div style={{ marginBottom: '10px' }}>
                 <label>Свой вес (кг): </label>
-                <input type="number" value={entry.bodyweight || ''} onChange={e => updateField(slot.category, 'bodyweight', e.target.value)} style={{ width: '70px' }} />
+                <input type="number" value={entry.bodyweight || ''} onChange={e => updateField(slot.id, 'bodyweight', e.target.value)} style={{ width: '70px' }} />
               </div>
             )}
             {macrocycleId && currentWeek === 1 && !isFree && (
@@ -324,7 +333,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                 <p><strong>Разминка:</strong></p>
                 {entry.warmupSets.map((ws, idx) => (
                   <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <input type="checkbox" checked={entry.warmupChecked[idx] || false} onChange={() => toggleWarmupCheck(slot.category, idx)} />
+                    <input type="checkbox" checked={entry.warmupChecked[idx] || false} onChange={() => toggleWarmupCheck(slot.id, idx)} />
                     {ws.isBodyweight ? `Свой вес` : `${ws.weight} кг`} × {ws.reps}
                   </label>
                 ))}
@@ -341,12 +350,12 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                 )}
                 <div style={{ marginBottom: '10px' }}>
                   <label>Топ-сет: вес (кг) </label>
-                  <input type="number" value={entry.topSetWeight} onChange={e => updateField(slot.category, 'topSetWeight', e.target.value)} style={{ width: '80px', marginRight: '10px' }} />
+                  <input type="number" value={entry.topSetWeight} onChange={e => updateField(slot.id, 'topSetWeight', e.target.value)} style={{ width: '80px', marginRight: '10px' }} />
                   <label>Повторы </label>
-                  <input type="number" value={entry.topSetReps} onChange={e => updateField(slot.category, 'topSetReps', e.target.value)} style={{ width: '60px', marginRight: '10px' }} />
+                  <input type="number" value={entry.topSetReps} onChange={e => updateField(slot.id, 'topSetReps', e.target.value)} style={{ width: '60px', marginRight: '10px' }} />
                   <label>RPE </label>
-                  <input type="number" step="0.5" min="6" max="10" value={entry.topSetRPE} onChange={e => updateField(slot.category, 'topSetRPE', e.target.value)} style={{ width: '60px' }} />
-                  <button onClick={() => handleCalculate(slot.category)} style={{ marginLeft: '10px', padding: '5px 15px' }}>Рассчитать</button>
+                  <input type="number" step="0.5" min="6" max="10" value={entry.topSetRPE} onChange={e => updateField(slot.id, 'topSetRPE', e.target.value)} style={{ width: '60px' }} />
+                  <button onClick={() => handleCalculate(slot.id)} style={{ marginLeft: '10px', padding: '5px 15px' }}>Рассчитать</button>
                 </div>
                 {entry.pdm !== null && (
                   <div style={{ background: '#f0f0f0', padding: '10px' }}>
@@ -358,44 +367,27 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                       const checked = entry.backoffChecked[idx] || false;
                       return (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleBackoffCheck(slot.category, idx)} />
-                          <input
-                            type="number" placeholder="Вес" value={set.weight || ''}
-                            onChange={e => updateBackoffSet(slot.category, idx, 'weight', e.target.value)}
-                            style={{ width: '70px' }}
-                          />
+                          <input type="checkbox" checked={checked} onChange={() => toggleBackoffCheck(slot.id, idx)} />
+                          <input type="number" placeholder="Вес" value={set.weight || ''} onChange={e => updateBackoffSet(slot.id, idx, 'weight', e.target.value)} style={{ width: '70px' }} />
                           <span>кг x</span>
-                          <input
-                            type="number" placeholder="Повт" value={set.reps || ''}
-                            onChange={e => updateBackoffSet(slot.category, idx, 'reps', e.target.value)}
-                            style={{ width: '60px' }}
-                          />
+                          <input type="number" placeholder="Повт" value={set.reps || ''} onChange={e => updateBackoffSet(slot.id, idx, 'reps', e.target.value)} style={{ width: '60px' }} />
                           <span>— {pct}% ПДМ</span>
-                          <button onClick={() => removeBackoffSet(slot.category, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                            ✕
-                          </button>
+                          <button onClick={() => removeBackoffSet(slot.id, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>✕</button>
                         </div>
                       );
                     })}
                     {entry.backoffSets.length < 5 && (
-                      <button onClick={() => addBackoffSet(slot.category)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                        ➕ Добавить подход
-                      </button>
+                      <button onClick={() => addBackoffSet(slot.id)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>➕ Добавить подход</button>
                     )}
                     <div style={{ marginTop: '10px' }}>
                       <label>RPE последнего подхода: </label>
-                      <input
-                        type="number" step="0.5" min="6" max="10"
-                        value={entry.lastBackoffRPE}
-                        onChange={e => updateField(slot.category, 'lastBackoffRPE', e.target.value)}
-                        style={{ width: '60px' }}
-                      />
+                      <input type="number" step="0.5" min="6" max="10" value={entry.lastBackoffRPE} onChange={e => updateField(slot.id, 'lastBackoffRPE', e.target.value)} style={{ width: '60px' }} />
                     </div>
                   </div>
                 )}
-                {deloadInfo[slot.category]?.shouldDeload && (
+                {deloadInfo[slot.id]?.shouldDeload && (
                   <div style={{ background: '#fff3cd', padding: '8px', marginTop: '8px', borderRadius: '5px' }}>
-                    ⚠️ ПДМ упал на {deloadInfo[slot.category]!.percentDrop.toFixed(1)}% по сравнению с прошлой тренировкой. Применена разгрузка.
+                    ⚠️ ПДМ упал на {deloadInfo[slot.id]!.percentDrop.toFixed(1)}% по сравнению с прошлой тренировкой. Применена разгрузка.
                   </div>
                 )}
               </>
@@ -406,22 +398,20 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                   const checked = entry.backoffChecked[idx] || false;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleBackoffCheck(slot.category, idx)} />
-                      <input type="number" placeholder="Вес" value={set.weight || ''} onChange={e => updateBackoffSet(slot.category, idx, 'weight', e.target.value)} style={{ width: '70px' }} />
+                      <input type="checkbox" checked={checked} onChange={() => toggleBackoffCheck(slot.id, idx)} />
+                      <input type="number" placeholder="Вес" value={set.weight || ''} onChange={e => updateBackoffSet(slot.id, idx, 'weight', e.target.value)} style={{ width: '70px' }} />
                       <span>кг x</span>
-                      <input type="number" placeholder="Повт" value={set.reps || ''} onChange={e => updateBackoffSet(slot.category, idx, 'reps', e.target.value)} style={{ width: '60px' }} />
-                      <button onClick={() => removeBackoffSet(slot.category, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px' }}>✕</button>
+                      <input type="number" placeholder="Повт" value={set.reps || ''} onChange={e => updateBackoffSet(slot.id, idx, 'reps', e.target.value)} style={{ width: '60px' }} />
+                      <button onClick={() => removeBackoffSet(slot.id, idx)} style={{ background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px' }}>✕</button>
                     </div>
                   );
                 })}
                 {entry.backoffSets.length < 10 && (
-                  <button onClick={() => addBackoffSet(slot.category)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                    ➕ Добавить подход
-                  </button>
+                  <button onClick={() => addBackoffSet(slot.id)} style={{ marginTop: '5px', padding: '4px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>➕ Добавить подход</button>
                 )}
                 <div style={{ marginTop: '10px' }}>
                   <label>RPE последнего подхода: </label>
-                  <input type="number" step="0.5" min="6" max="10" value={entry.lastBackoffRPE} onChange={e => updateField(slot.category, 'lastBackoffRPE', e.target.value)} style={{ width: '60px' }} />
+                  <input type="number" step="0.5" min="6" max="10" value={entry.lastBackoffRPE} onChange={e => updateField(slot.id, 'lastBackoffRPE', e.target.value)} style={{ width: '60px' }} />
                 </div>
               </>
             )}
