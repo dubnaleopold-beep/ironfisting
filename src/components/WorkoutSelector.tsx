@@ -39,14 +39,27 @@ const WorkoutSelector = () => {
     ? selectedMacrocycle.microcycles.find(m => m.week === macroWeek) || null
     : null;
 
-  // ВАЖНО: selectedDay нужно здесь
   const selectedDay = selectedDayIndex !== null ? workoutPlan[selectedDayIndex] : null;
 
   const getExerciseById = (id: string): Exercise | undefined =>
     exercisesData.find(ex => ex.id === id);
 
+  // Полный сброс на главную (только для кнопки заголовка или свободной тренировки)
   const resetToMain = () => {
     setMode('free');
+    setShowHistory(false);
+    setShowAnalytics(false);
+    setShowFAQ(false);
+    setFreeSlots([]);
+    setIsFreeTrainingStarted(false);
+    setSelectedMacrocycleId(null);
+    setMacroModeActive(false);
+    setSelectedDayIndex(null);
+    setIsStarted(false);
+  };
+
+  // Сброс для переключения режимов без смены mode
+  const resetStateKeepMode = () => {
     setShowHistory(false);
     setShowAnalytics(false);
     setShowFAQ(false);
@@ -111,7 +124,7 @@ const WorkoutSelector = () => {
     );
   }
 
-  // Рендер макроцикла (или обычной тренировки, если оставлено)
+  // Рендер макроцикла (или старого режима, если день выбран)
   if (isStarted && selectedDayIndex !== null && selectedDayIndex >= 0 && selectedDay) {
     return (
       <ActiveWorkout
@@ -168,11 +181,11 @@ const WorkoutSelector = () => {
       <h1 onClick={resetToMain} style={{ cursor: 'pointer', userSelect: 'none' }}>IronFisting</h1>
 
       <div style={{ marginBottom: '10px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-        <button onClick={() => { setMode('free'); resetToMain(); }}
+        <button onClick={() => { setMode('free'); resetStateKeepMode(); }}
           style={btnStyle(mode === 'free')}>
           Свободная тренировка
         </button>
-        <button onClick={() => { setMode('macrocycle'); resetToMain(); }}
+        <button onClick={() => { setMode('macrocycle'); resetStateKeepMode(); }}
           style={btnStyle(mode === 'macrocycle')}>
           Макроцикл
         </button>
