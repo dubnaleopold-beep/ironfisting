@@ -5,12 +5,24 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import EditWorkout from './EditWorkout';
+import exercisesData from '../data/exercises';
 
 interface HistoryProps {
   onBackToMain: () => void;
 }
 
 const MAX_BACKOFF_SETS = 5;
+
+const getExerciseName = (id: string) => exercisesData.find(e => e.id === id)?.name || id;
+
+// Функция для отображения дня с учётом макроцикла
+const getDayDisplay = (log: WorkoutLog): string => {
+  if (log.macrocycleId) {
+    const cycleName = log.macrocycleId === 'mass_12weeks' ? 'Масса' : log.macrocycleId === 'cut_10weeks' ? 'Сушка' : 'Макроцикл';
+    return `${log.dayName} (${cycleName})`;
+  }
+  return log.dayName === 'Свободная тренировка' ? 'Свободная' : log.dayName;
+};
 
 const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
@@ -46,11 +58,9 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     }
   };
 
-  // Экспорт с Exercise ID (полный, без урезаний)
   const exportToCSV = () => {
     const sep = ';';
     const rows: string[] = [];
-
     const headerCols = [
       'Дата', 'День', 'Цикл', 'Exercise ID', 'Упражнение', 'ПДМ (кг)', 'Тоннаж (кг)', 'КПШ',
       'Топ-сет вес (кг)', 'Топ-сет повторы', 'Топ-сет RPE'
@@ -71,7 +81,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
           log.dayName,
           cycle,
           ex.exerciseId,
-          ex.category,
+          getExerciseName(ex.exerciseId),
           ex.pdm.toString(),
           (ex.tonnage || 0).toString(),
           (ex.kpsh || 0).toString(),
@@ -103,7 +113,6 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
     URL.revokeObjectURL(url);
   };
 
-  // Импорт CSV
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -143,13 +152,13 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       };
     });
 
-  // Данные для таблицы "по упражнению"
   const exerciseTableData = logs.flatMap(log =>
     log.exercises
       .filter(e => e.exerciseId === selectedExercise)
       .map(e => ({
         date: log.date,
         dayName: log.dayName,
+        macrocycleId: log.macrocycleId,
         ...e,
       }))
   ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -190,7 +199,9 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
       <div style={{ marginBottom: '20px', marginTop: '15px' }}>
         <label>Показать динамику для: </label>
         <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={{ padding: '5px' }}>
-          {uniqueExercises.map(id => <option key={id} value={id}>{id}</option>)}
+          {uniqueExercises.map(id => (
+            <option key={id} value={id}>{getExerciseName(id)}</option>
+          ))}
         </select>
         <div style={{ marginTop: '10px' }}>
           <button onClick={() => setViewMode('day')} style={{ marginRight: '10px', padding: '5px 15px', backgroundColor: viewMode === 'day' ? '#4CAF50' : '#ddd', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>По дням</button>
@@ -198,7 +209,6 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
         </div>
       </div>
 
-      {/* Графики */}
       <h3>Динамика ПДМ</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData}>
@@ -225,8 +235,7 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Таблицы */}
-      <h3>{viewMode === 'day' ? 'Все записи' : `История упражнения: ${selectedExercise}`}</h3>
+      <h3>{viewMode === 'day' ? 'Все записи' : `История упражнения: ${getExerciseName(selectedExercise)}`}</h3>
       {viewMode === 'day' ? (
         <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
@@ -252,10 +261,10 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
                     {exIdx === 0 && (
                       <>
                         <td rowSpan={log.exercises.length} style={tdStyle}>{new Date(log.date).toLocaleDateString('ru-RU')}</td>
-                        <td rowSpan={log.exercises.length} style={tdStyle}>{log.dayName}</td>
+                        <td rowSpan={log.exercises.length} style={tdStyle}>{getDayDisplay(log)}</td>
                       </>
                     )}
-                    <td style={tdStyle}>{ex.category}</td>
+                    <td style={tdStyle}>{getExerciseName(ex.exerciseId)}</td>
                     <td style={tdStyle}>{ex.pdm}</td>
                     <td style={tdStyle}>{ex.tonnage || 0}</td>
                     <td style={tdStyle}>{ex.kpsh || 0}</td>
@@ -290,18 +299,27 @@ const History: React.FC<HistoryProps> = ({ onBackToMain }) => {
               </tr>
             </thead>
             <tbody>
-              {exerciseTableData.map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #ddd' }}>
-                  <td style={tdStyle}>{new Date(row.date).toLocaleDateString('ru-RU')}</td>
-                  <td style={tdStyle}>{row.dayName}</td>
-                  <td style={tdStyle}>{row.pdm}</td>
-                  <td style={tdStyle}>{row.tonnage || 0}</td>
-                  <td style={tdStyle}>{row.kpsh || 0}</td>
-                  <td style={tdStyle}>{row.topSet?.weight || '?'} кг x {row.topSet?.reps || '?'} @ {row.topSet?.rpe || '?'}</td>
-                  <td style={tdStyle}>{row.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
-                  <td style={tdStyle}>{row.lastBackoffRPE || '—'}</td>
-                </tr>
-              ))}
+              {exerciseTableData.map((row, i) => {
+                // Для таблицы по упражнению тоже используем getDayDisplay, но у нас нет полного log, только поля. Создадим временный объект:
+                const tempLog: WorkoutLog = {
+                  date: row.date,
+                  dayName: row.dayName,
+                  macrocycleId: row.macrocycleId,
+                  exercises: [],
+                };
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #ddd' }}>
+                    <td style={tdStyle}>{new Date(row.date).toLocaleDateString('ru-RU')}</td>
+                    <td style={tdStyle}>{getDayDisplay(tempLog)}</td>
+                    <td style={tdStyle}>{row.pdm}</td>
+                    <td style={tdStyle}>{row.tonnage || 0}</td>
+                    <td style={tdStyle}>{row.kpsh || 0}</td>
+                    <td style={tdStyle}>{row.topSet?.weight || '?'} кг x {row.topSet?.reps || '?'} @ {row.topSet?.rpe || '?'}</td>
+                    <td style={tdStyle}>{row.backoffSets?.map(s => `${s.weight}x${s.reps}`).join(', ') || '—'}</td>
+                    <td style={tdStyle}>{row.lastBackoffRPE || '—'}</td>
+                  </tr>
+                );
+              })}
               {exerciseTableData.length === 0 && (
                 <tr><td colSpan={8} style={tdStyle}>Нет данных по выбранному упражнению</td></tr>
               )}

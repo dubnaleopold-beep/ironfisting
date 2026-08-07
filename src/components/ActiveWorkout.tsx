@@ -5,7 +5,7 @@ import { calculatePDM, getPercentPM } from '../data/rpeTable';
 import { getLastPDM, saveLog, loadDraft, removeDraft, saveDraft } from '../utils/storage';
 import type { ExerciseLogEntry, WorkoutLog } from '../utils/storage';
 import { checkDeload, checkDeloadWithReference } from '../utils/deload';
-import { completeWeek, saveReferencePDM, getReferencePDM } from '../utils/macrocycleStorage';
+import { completeDay, saveReferencePDM, getReferencePDM } from '../utils/macrocycleStorage';
 import type { Microcycle } from '../data/macrocycle';
 import { generateWarmupSets, type WarmupSet } from '../utils/warmupGenerator';
 
@@ -80,7 +80,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     saveDraft({ dayIndex, macrocycleId, currentWeek, entries });
   }, [entries, dayIndex, macrocycleId, currentWeek]);
 
-  // разминка для макроцикла
+  // разминка для макроцикла (как раньше)
   useEffect(() => {
     if (!macrocycleId || !microcycle || !currentWeek || currentWeek <= 1) return;
     setEntries(prev => {
@@ -256,7 +256,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
 
     const log: WorkoutLog = {
       date: new Date(trainingDate).toISOString(),
-      dayName: `Тренировка ${dayIndex + 1}`,
+      dayName: dayIndex >= 0 ? `Тренировка ${dayIndex + 1}` : 'Свободная тренировка',
       exercises: logExercises,
       mode: macrocycleId ? 'macrocycle' : 'free',
       macrocycleId: macrocycleId || undefined,
@@ -264,8 +264,8 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     };
     saveLog(log);
 
-    if (macrocycleId && currentWeek) {
-      completeWeek(macrocycleId, currentWeek);
+    if (macrocycleId && currentWeek !== undefined && dayIndex >= 0) {
+      completeDay(macrocycleId, currentWeek, dayIndex);
       logExercises.forEach(e => {
         if (getReferencePDM(e.exerciseId) === null) saveReferencePDM(e.exerciseId, e.pdm);
       });
@@ -305,7 +305,8 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         return (
           <div key={slot.id} style={{ border: '1px solid #ddd', margin: '10px 0', padding: '15px', borderRadius: '8px' }}>
             <h3>{getExerciseName(entry.exerciseId)} ({slot.category})</h3>
-            {slot.alternatives.length > 1 && (
+            {/* Замена упражнения — если есть альтернативы (берем из exercisesData) */}
+            {ex && ex.alternatives && ex.alternatives.length > 1 && (
               <div style={{ marginBottom: '10px' }}>
                 <label>Заменить: </label>
                 <select value={entry.exerciseId} onChange={e => {
@@ -313,7 +314,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                   setEntries(prev => ({ ...prev, [slot.id]: { ...prev[slot.id], exerciseId: newId, topSetWeight: '', topSetReps: '', topSetRPE: '', pdm: null, backoffSets: [], lastBackoffRPE: '', warmupSets: [], warmupChecked: [], backoffChecked: [] } }));
                   setDeloadInfo(prev => ({ ...prev, [slot.id]: null }));
                 }} style={{ padding: '5px' }}>
-                  {slot.alternatives.map(altId => <option key={altId} value={altId}>{exercisesData.find(e => e.id === altId)?.name || altId}</option>)}
+                  {ex.alternatives.map(altId => <option key={altId} value={altId}>{exercisesData.find(e => e.id === altId)?.name || altId}</option>)}
                 </select>
               </div>
             )}
